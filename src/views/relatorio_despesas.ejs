@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relatório de Despesas</title>
+    <link rel="stylesheet" href="/styles.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        h1 {
+            text-align: center;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        table, th, td {
+            border: 1px solid #ccc;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+        }
+        #print-button {
+            margin-top: 20px;
+            text-align: center;
+        }
+    </style>
+    <script>
+        function printReport() {
+            window.print();
+        }
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h1>Relatório de Despesas</h1>
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Descrição</th>
+                    <th>Tipo de Despesa</th>
+                    <th>Cliente</th>
+                    <th>Consultor</th>
+                    <th>Data</th>
+                    <th>Valor</th>
+                    <th>Comprovante</th>
+                </tr>
+            </thead>
+            <tbody>
+                <% despesas.forEach(despesa => { %>
+                    <tr>
+                        <td><%= despesa.id %></td>
+                        <td><%= despesa.descricao %></td>
+                        <td><%= despesa.tipoDespesa.nome %></td>
+                        <td><%= despesa.cliente.razaoSocial %></td>
+                        <td><%= despesa.consultor.nome %></td>
+                        <td><%= despesa.data %></td>
+                        <td><%= despesa.valor %></td>
+                        <td>
+                            <a href="/<%= despesa.comprovante %>" target="_blank">Visualizar</a>
+                        </td>
+                    </tr>
+                <% }) %>
+            </tbody>
+        </table>
+        <div id="print-button">
+            <button onclick="printReport()">Imprimir</button>
+        </div>
+        <div id="total-despesas">
+            <h2>Total das Despesas: R$ <%= totalDespesas %></h2>
+        </div>
+    </div>
+</body>
+</html>

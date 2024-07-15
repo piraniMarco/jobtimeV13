@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editar Comprovante</title>
+    <link rel="stylesheet" href="/styles.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        h1 {
+            text-align: center;
+        }
+        .form-container {
+            width: 50%;
+            margin: 0 auto;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            background-color: #f9f9f9;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+        }
+        .form-actions {
+            text-align: center;
+        }
+        .form-actions button {
+            padding: 10px 20px;
+            margin: 5px;
+        }
+        #comprovante-visualizacao {
+            text-align: center;
+            margin-top: 20px;
+        }
+        #comprovante-visualizacao a {
+            color: blue;
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Editar Comprovante</h1>
+        <div class="form-container">
+            <form id="editar-comprovante-form" action="/comprovantes/editar/<%= comprovante.id %>" method="POST" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label for="descricao">Descrição:</label>
+                    <input type="text" id="descricao" name="descricao" value="<%= comprovante.descricao %>" required>
+                </div>
+                <div class="form-group">
+                    <label for="tipoDespesaId">Tipo de Despesa:</label>
+                    <select id="tipoDespesaId" name="tipoDespesaId" required>
+                        <% tiposDeDespesa.forEach(tipo => { %>
+                            <option value="<%= tipo.id %>" <%= tipo.id === comprovante.tipoDespesaId ? 'selected' : '' %>><%= tipo.nome %></option>
+                        <% }) %>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="clienteId">Cliente:</label>
+                    <select id="clienteId" name="clienteId" required>
+                        <% clientes.forEach(cliente => { %>
+                            <option value="<%= cliente.id %>" <%= cliente.id === comprovante.clienteId ? 'selected' : '' %>><%= cliente.razaoSocial %></option>
+                        <% }) %>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="consultorId">Consultor:</label>
+                    <select id="consultorId" name="consultorId" required>
+                        <% consultores.forEach(consultor => { %>
+                            <option value="<%= consultor.id %>" <%= consultor.id === comprovante.consultorId ? 'selected' : '' %>><%= consultor.nome %></option>
+                        <% }) %>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="data">Data:</label>
+                    <input type="date" id="data" name="data" value="<%= comprovante.data %>" required>
+                </div>
+                <div class="form-group">
+                    <label for="valor">Valor:</label>
+                    <input type="text" id="valor" name="valor" value="<%= comprovante.valor %>" required>
+                </div>
+                <div class="form-group">
+                    <label for="comprovante">Anexar Novo Comprovante (Opcional):</label>
+                    <input type="file" id="comprovante" name="comprovante">
+                </div>
+                <div id="comprovante-visualizacao">
+                    <% if (comprovante.comprovante) { %>
+                        <a href="/<%= comprovante.comprovante %>" target="_blank">Visualizar Comprovante Atual</a>
+                    <% } %>
+                </div>
+                <div class="form-actions">
+                    <button type="submit">Salvar Alterações</button>
+                    <button type="button" onclick="window.location.href='/menu'">Voltar ao Menu</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

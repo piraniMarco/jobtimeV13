@@ -1,5 +1,6 @@
 const { Sequelize, DataTypes } = require('sequelize');
-const connection = require('../config/database'); // Certifique-se de que o caminho está correto
+const connection = require('../config/database');
+const Comprovante = require('./comprovantes'); 
 
 const Consultores = connection.define('Consultores', {
     nome: {
@@ -19,7 +20,7 @@ const Consultores = connection.define('Consultores', {
         allowNull: false,
         unique: true,
         validate: {
-            isEmail: true // Validação de e-mail
+            isEmail: true 
         }
     },
     login: {
@@ -34,7 +35,7 @@ const Consultores = connection.define('Consultores', {
     admin: {
         type: DataTypes.BOOLEAN,
         allowNull: false,
-        defaultValue: false // Define o valor padrão como falso
+        defaultValue: false 
     }
 }, {
     indexes: [
@@ -49,10 +50,6 @@ const Consultores = connection.define('Consultores', {
     ]
 });
 
-Consultores.sync({ alter: true }).then(() => {
-    console.log("Tabela 'Consultores' criada ou atualizada no banco de dados");
-}).catch(err => {
-    console.error("Erro ao sincronizar modelo com o banco de dados:", err);
-});
+Consultores.hasMany(Comprovante, { foreignKey: 'consultorId' });
 
 module.exports = Consultores;

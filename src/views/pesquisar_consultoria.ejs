@@ -141,7 +141,7 @@
             <tbody>
                 <% consultorias.forEach(consultoria => { %>
                     <tr>
-                        <td><%= new Date(consultoria.data).toLocaleDateString('pt-BR') %></td>
+                        <td><%= consultoria.data%></td>
                         <td><%= consultoria.horaInicio %></td>
                         <td><%= consultoria.horaFim %></td>
                         <td><%= consultoria.intervalo %></td>

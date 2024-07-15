@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Consultar Consultorias</title>
+    <link rel="stylesheet" href="/styles.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        h1 {
+            text-align: center;
+        }
+        .form-container {
+            width: 50%;
+            margin: 0 auto;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            background-color: #f9f9f9;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+        }
+        .form-actions {
+            text-align: center;
+        }
+        .form-actions button {
+            padding: 10px 20px;
+            margin: 5px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        table, th, td {
+            border: 1px solid #ccc;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+        }
+    </style>
+    <script>
+        function calcularTotal(horaInicio, horaFim, intervalo, valorHora) {
+            const [inicioHora, inicioMinuto] = horaInicio.split(':').map(Number);
+            const [fimHora, fimMinuto] = horaFim.split(':').map(Number);
+            const totalHoras = (fimHora + fimMinuto / 60) - (inicioHora + inicioMinuto / 60) - intervalo;
+            return (totalHoras * valorHora).toFixed(2);
+        }
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h1>Consultorias</h1>
+        <div class="form-container">
+            <form id="pesquisar-consultoria-form" action="/consultoria/pesquisar" method="GET">
+                <div class="form-group">
+                    <label for="dataInicial">Data Início:</label>
+                    <input type="date" id="dataInicial" name="dataInicial">
+                </div>
+                <div class="form-group">
+                    <label for="dataFinal">Data Fim:</label>
+                    <input type="date" id="dataFinal" name="dataFinal">
+                </div>
+                <div class="form-group">
+                    <label for="clienteId">Cliente:</label>
+                    <select id="clienteId" name="clienteId">
+                        <option value="">Todos</option>
+                        <% clientes.forEach(cliente => { %>
+                            <option value="<%= cliente.id %>"><%= cliente.nomeFantasia %></option>
+                        <% }) %>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="consultorId">Consultor:</label>
+                    <select id="consultorId" name="consultorId">
+                        <option value="">Todos</option>
+                        <% consultores.forEach(consultor => { %>
+                            <option value="<%= consultor.id %>"><%= consultor.nome %></option>
+                        <% }) %>
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button type="submit">Filtrar</button>
+                    <button type="button" onclick="window.location.href='/menu'">Voltar ao Menu</button>
+                    <button type="button" onclick="window.print()">Imprimir Relatório</button>
+                </div>
+            </form>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Data</th>
+                    <th>Hora Início</th>
+                    <th>Hora Fim</th>
+                    <th>Intervalo</th>
+                    <th>Valor por Hora</th>
+                    <th>Cliente</th>
+                    <th>Consultor</th>
+                    <th>Total (R$)</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                <% consultorias.forEach(consultoria => { %>
+                    <tr>
+                        <td><%= consultoria.data %></td>
+                        <td><%= consultoria.horaInicio %></td>
+                        <td><%= consultoria.horaFim %></td>
+                        <td><%= consultoria.intervalo %></td>
+                        <td><%= consultoria.valorHora %></td>
+                        <td><%= consultoria.cliente ? consultoria.cliente.nomeFantasia : '' %></td>
+                        <td><%= consultoria.consultor ? consultoria.consultor.nome : '' %></td>
+                        <td>
+                            <script>
+                                document.write(
+                                    calcularTotal(
+                                        <%= consultoria.horaInicio %>, 
+                                        <%= consultoria.horaFim %>", 
+                                        <%= consultoria.intervalo %>, 
+                                        <%= consultoria.valorHora %>
+                                    )
+                                );
+                            </script>
+                        </td>
+                        <td>
+                            <a href="/editar-consultoria/<%= consultoria.id %>">Editar</a> | 
+                            <a href="/deletar-consultoria/<%= consultoria.id %>" onclick="return confirm('Tem certeza que deseja deletar esta consultoria?')">Deletar</a>
+                        </td>
+                    </tr>
+                <% }) %>
+            </tbody>
+        </table>
+        <div class="form-actions">
+            <button type="button" onclick="window.print()">Imprimir Relatório</button>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cadastro de Tipos de Despesa</title>
+    <link rel="stylesheet" href="/styles.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        h1 {
+            text-align: center;
+        }
+        .form-container {
+            width: 50%;
+            margin: 0 auto;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            background-color: #f9f9f9;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+        }
+        .form-actions {
+            text-align: center;
+        }
+        .form-actions button {
+            padding: 10px 20px;
+            margin: 5px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        table, th, td {
+            border: 1px solid #ccc;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+        }
+        #success-message {
+            display: none;
+            width: 50%;
+            margin: 20px auto;
+            padding: 10px;
+            border: 1px solid #4CAF50;
+            color: #4CAF50;
+            background-color: #dff0d8;
+            text-align: center;
+            border-radius: 5px;
+        }
+        #error-message {
+            display: none;
+            width: 50%;
+            margin: 20px auto;
+            padding: 10px;
+            border: 1px solid #f44336;
+            color: #f44336;
+            background-color: #fdd;
+            text-align: center;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Cadastro de Tipos de Despesa</h1>
+        <% if (success) { %>
+            <div id="success-message">Tipo de despesa registrado com sucesso</div>
+        <% } %>
+        <div class="form-container">
+            <form id="tipo-despesa-form" action="/tipos-de-despesa/cadastrar" method="POST">
+                <div class="form-group">
+                    <label for="nome">Tipo de Despesa:</label>
+                    <input type="text" id="nome" name="nome" required>
+                </div>
+                <div class="form-actions">
+                    <button type="submit">Salvar</button>
+                    <button type="button" onclick="window.location.href='/menu'">Voltar ao Menu</button>
+                </div>
+            </form>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Tipo de Despesa</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                <% tiposDeDespesa.forEach(tipo => { %>
+                    <tr>
+                        <td><%= tipo.id %></td>
+                        <td><%= tipo.nome %></td>
+                        <td>
+                            <a href="/tipos-de-despesa/editar/<%= tipo.id %>">Editar</a> | 
+                            <form action="/tipos-de-despesa/deletar/<%= tipo.id %>" method="POST" style="display: inline;" onsubmit="return confirm('Tem certeza que deseja deletar este tipo de despesa?')">
+                                <input type="hidden" name="_method" value="DELETE">
+                                <button type="submit">Deletar</button>
+                            </form>
+                            
+                        </td>
+                    </tr>
+                <% }) %>
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

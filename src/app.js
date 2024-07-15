@@ -5,33 +5,61 @@ const bcrypt = require('bcrypt');
 const bodyParser = require('body-parser');
 const Sequelize = require('sequelize');
 const { Op } = require('sequelize');
+const multer = require('multer');
+const fs = require('fs');
 
 // Ajustar os caminhos dos módulos
 const Clientes = require('./models/clientes'); 
 const Consultores = require('./models/consultores');
 const Consultoria = require('./models/consultoria');
-const Feedback = require('./models/feedback'); // Importar o modelo Feedback
+const Feedback = require('./models/feedback');
+const Comprovante = require('./models/comprovantes'); 
+const TipoDeDespesa = require('./models/tipos_de_despesa'); 
 
 const app = express();
 const porta = process.env.PORT || 3001; 
+
+// Criação do diretório de uploads se não existir
+const uploadDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir);
+}
 
 // Configuração do body-parser para lidar com dados do formulário
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
+// Configuração do multer
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, 'uploads/');
+    },
+    filename: function (req, file, cb) {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+    }
+});
+const upload = multer({ storage: storage });
+
 // Configurar arquivos estáticos
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-app.get('/', (req, res) => {
-    res.render('login'); // Renderiza o arquivo login.ejs na pasta views
-});
+// Middleware de autenticação
+function isAuthenticated(req, res, next) {
+    if (req.session.consultorId) {
+        return next();
+    } else {
+        res.redirect('/login');
+    }
+}
 
 // Configuração do EJS
-app.set('views', path.join(__dirname, 'views')); // Ajuste o caminho conforme necessário
+app.set('views', path.join(__dirname, 'views')); 
 app.set('view engine', 'ejs');
 
 // Conexão com o banco de dados MySQL usando Sequelize
-const sequelize = require('./config/database'); // Ajuste o caminho conforme necessário
+const sequelize = require('./config/database'); 
 
 // Sincronização dos modelos com o banco de dados
 sequelize.sync({ alter: true }).then(() => {
@@ -40,29 +68,15 @@ sequelize.sync({ alter: true }).then(() => {
     console.error('Erro ao sincronizar as tabelas:', err);
 });
 
-// Rota para lidar com a solicitação de salvar os dados no banco de dados - Clientes
-app.post('/salvar-clientes', async (req, res) => {
-    try {
-        const { razaoSocial, nomeFantasia, cnpj, telefone, email } = req.body;
+// Definindo associações
+TipoDeDespesa.hasMany(Comprovante, { foreignKey: 'tipoDespesaId', as: 'comprovantes' });
+Comprovante.belongsTo(TipoDeDespesa, { foreignKey: 'tipoDespesaId', as: 'tipoDespesa' });
 
-        const novoCliente = await Clientes.create({
-            razaoSocial,
-            nomeFantasia,
-            cnpj,
-            telefone,
-            email
-        });
+Clientes.hasMany(Comprovante, { foreignKey: 'clienteId', as: 'comprovantes' });
+Comprovante.belongsTo(Clientes, { foreignKey: 'clienteId', as: 'cliente' });
 
-        res.json({
-            success: true,
-            cliente: novoCliente
-        });
-
-    } catch (err) {
-        console.error('Erro ao salvar cliente:', err);
-        res.status(500).json({ success: false, message: 'Erro ao salvar cliente.' });
-    }
-});
+Consultores.hasMany(Comprovante, { foreignKey: 'consultorId', as: 'comprovantes' });
+Comprovante.belongsTo(Consultores, { foreignKey: 'consultorId', as: 'consultor' });
 
 // Configuração da sessão
 app.use(session({
@@ -73,6 +87,10 @@ app.use(session({
 }));
 
 // Rota para renderizar página de login
+app.get('/', (req, res) => {
+    res.render('login', { error: null });
+});
+
 app.get('/login', (req, res) => {
     res.render('login', { error: null });
 });
@@ -118,12 +136,222 @@ app.post('/login', async (req, res) => {
     }
 });
 
-// Rota para lidar com a solicitação de salvar os dados no banco de dados - Consultores
+// Aplicando o middleware de autenticação às rotas protegidas
+app.use(isAuthenticated);
+
+app.get('/menu', (req, res) => {
+    res.render('menu');
+});
+
+app.get('/comprovantes/inserir', async (req, res) => {
+    try {
+        const tiposDeDespesa = await TipoDeDespesa.findAll();
+        const clientes = await Clientes.findAll();
+        const consultores = await Consultores.findAll();
+        const success = req.query.success === 'true'; 
+        res.render('inserir_comprovante', { tiposDeDespesa, clientes, consultores, success });
+    } catch (err) {
+        console.error('Erro ao carregar a página de inserção de comprovante:', err);
+        res.status(500).send('Erro ao carregar a página de inserção de comprovante.');
+    }
+});
+
+app.post('/comprovantes/inserir', upload.single('comprovante'), async (req, res) => {
+    try {
+        const { descricao, tipoDespesaId, clienteId, consultorId, data, valor } = req.body;
+        const comprovante = req.file ? req.file.path : null;
+        await Comprovante.create({ descricao, tipoDespesaId, clienteId, consultorId, data, valor, comprovante });
+        res.redirect('/comprovantes/inserir?success=true');
+    } catch (err) {
+        console.error('Erro ao inserir comprovante:', err);
+        res.status(500).send('Erro ao inserir comprovante.');
+    }
+});
+
+app.get('/comprovantes/pesquisar', async (req, res) => {
+    try {
+        const comprovantes = await Comprovante.findAll({
+            include: [
+                { model: TipoDeDespesa, as: 'tipoDespesa' },
+                { model: Clientes, as: 'cliente' },
+                { model: Consultores, as: 'consultor' }
+            ]
+        });
+        const tiposDeDespesa = await TipoDeDespesa.findAll();
+        const clientes = await Clientes.findAll();
+        const consultores = await Consultores.findAll();
+        res.render('pesquisar_comprovante', { comprovantes, tiposDeDespesa, clientes, consultores });
+    } catch (err) {
+        console.error('Erro ao carregar a página de pesquisa de comprovante:', err);
+        res.status(500).send('Erro ao carregar a página de pesquisa de comprovante.');
+    }
+});
+
+app.get('/comprovantes/editar/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const comprovante = await Comprovante.findByPk(id);
+        const tiposDeDespesa = await TipoDeDespesa.findAll();
+        const clientes = await Clientes.findAll();
+        const consultores = await Consultores.findAll();
+        if (comprovante) {
+            res.render('editar_comprovante', { comprovante, tiposDeDespesa, clientes, consultores });
+        } else {
+            res.status(404).send('Comprovante não encontrado.');
+        }
+    } catch (err) {
+        console.error('Erro ao carregar dados do comprovante:', err);
+        res.status(500).send('Erro ao carregar dados do comprovante.');
+    }
+});
+
+app.post('/comprovantes/editar/:id', upload.single('comprovante'), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { descricao, tipoDespesaId, clienteId, consultorId, data, valor } = req.body;
+        const comprovante = req.file ? req.file.path : null;
+        const comp = await Comprovante.findByPk(id);
+        if (comp) {
+            comp.descricao = descricao;
+            comp.tipoDespesaId = tipoDespesaId;
+            comp.clienteId = clienteId;
+            comp.consultorId = consultorId;
+            comp.data = data;
+            comp.valor = valor;
+            if (comprovante) {
+                comp.comprovante = comprovante;
+            }
+            await comp.save();
+            res.redirect('/comprovantes/pesquisar');
+        } else {
+            res.status(404).send('Comprovante não encontrado.');
+        }
+    } catch (err) {
+        console.error('Erro ao atualizar dados do comprovante:', err);
+        res.status(500).send('Erro ao atualizar dados do comprovante.');
+    }
+});
+
+app.delete('/comprovantes-deletar/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        await Comprovante.destroy({ where: { id :id } });
+        res.redirect('/comprovantes/pesquisar');
+    } catch (err) {
+        console.error('Erro ao deletar comprovante:', err);
+        res.status(500).send('Erro ao deletar comprovante.');
+    }
+});
+app.get('/relatorio-despesas', async (req, res) => {
+    try {
+        const despesas = await Comprovante.findAll({
+            include: [
+                { model: TipoDeDespesa, as: 'tipoDespesa' },
+                { model: Clientes, as: 'cliente' },
+                { model: Consultores, as: 'consultor' }
+            ]
+        });
+        const totalDespesas = despesas.reduce((sum, despesa) => sum + parseFloat(despesa.valor), 0);
+        res.render('relatorio_despesas', { despesas, totalDespesas });
+    } catch (err) {
+        console.error('Erro ao gerar o relatório de despesas:', err);
+        res.status(500).send('Erro ao gerar o relatório de despesas.');
+    }
+});
+
+app.get('/cadastro/tipos-de-despesa', async (req, res) => {
+    try {
+        const tiposDeDespesa = await TipoDeDespesa.findAll();
+        const success = req.query.success || false; 
+        res.render('tipos_de_despesa', { tiposDeDespesa, success });
+    } catch (err) {
+        console.error('Erro ao carregar a página de tipos de despesa:', err);
+        res.status(500).send('Erro ao carregar a página de tipos de despesa.');
+    }
+});
+
+app.post('/tipos-de-despesa/cadastrar', async (req, res) => {
+    try {
+        const { nome } = req.body;
+        await TipoDeDespesa.create({ nome });
+        res.redirect('/cadastro/tipos-de-despesa?success=true');
+    } catch (err) {
+        console.error('Erro ao cadastrar tipo de despesa:', err);
+        res.status(500).send('Erro ao cadastrar tipo de despesa.');
+    }
+});
+
+app.get('/tipos-de-despesa/editar/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const tipo = await TipoDeDespesa.findByPk(id);
+        if (tipo) {
+            res.render('editar_tipo_de_despesa', { tipo });
+        } else {
+            res.status(404).send('Tipo de despesa não encontrado.');
+        }
+    } catch (err) {
+        console.error('Erro ao carregar dados do tipo de despesa:', err);
+        res.status(500).send('Erro ao carregar dados do tipo de despesa.');
+    }
+});
+
+app.post('/tipos-de-despesa/editar/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { nome } = req.body;
+        const tipo = await TipoDeDespesa.findByPk(id);
+        if (tipo) {
+            tipo.nome = nome;
+            await tipo.save();
+            res.redirect('/cadastro/tipos-de-despesa');
+        } else {
+            res.status(404).send('Tipo de despesa não encontrado.');
+        }
+    } catch (err) {
+        console.error('Erro ao atualizar dados do tipo de despesa:', err);
+        res.status(500).send('Erro ao atualizar dados do tipo de despesa.');
+    }
+});
+
+app.post('/tipos-de-despesa/deletar/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        await TipoDeDespesa.destroy({ where: { id } });
+        res.redirect('/cadastro/tipos-de-despesa');
+    } catch (err) {
+        console.error('Erro ao deletar tipo de despesa:', err);
+        res.status(500).send('Erro ao deletar tipo de despesa.');
+    }
+});
+
+app.post('/salvar-clientes', async (req, res) => {
+    try {
+        const { razaoSocial, nomeFantasia, cnpj, telefone, email } = req.body;
+
+        const novoCliente = await Clientes.create({
+            razaoSocial,
+            nomeFantasia,
+            cnpj,
+            telefone,
+            email
+        });
+
+        res.json({
+            success: true,
+            cliente: novoCliente
+        });
+
+    } catch (err) {
+        console.error('Erro ao salvar cliente:', err);
+        res.status(500).json({ success: false, message: 'Erro ao salvar cliente.' });
+    }
+});
+
 app.post('/salvar-consultores', async (req, res) => {
     try {
         const { nome, endereco, telefone, email, login, senha, admin } = req.body;
 
-        // Criptografar a senha antes de salvar
         const senhaCriptografada = await bcrypt.hash(senha, 10);
 
         const novoConsultor = await Consultores.create({
@@ -146,7 +374,6 @@ app.post('/salvar-consultores', async (req, res) => {
     }
 });
 
-// Rota para lidar com a solicitação de salvar os dados no banco de dados - Consultoria
 app.post('/salvar-consultoria', async (req, res) => {
     try {
         const { data, horaInicio, horaFim, intervalo, valorHora, clienteId, consultorId } = req.body;
@@ -168,8 +395,7 @@ app.post('/salvar-consultoria', async (req, res) => {
     }
 });
 
-// Rota para renderizar a página de pesquisa de consultoria
-app.get(['/consultoria/pesquisar', '/pesquisar-consultoria'], async (req, res) => {
+app.get(['/consultoria/pesquisar', '/pesquisar-consultoria'], isAuthenticated, async (req, res) => {
     try {
         const { consultorId, clienteId, dataInicial, dataFinal } = req.query;
         const whereClause = {};
@@ -210,8 +436,7 @@ app.get(['/consultoria/pesquisar', '/pesquisar-consultoria'], async (req, res) =
     }
 });
 
-// Rota para lidar com a pesquisa de consultorias (filtragem)
-app.get('/consultas/trabalhos', async (req, res) => {
+app.get('/consultas/trabalhos', isAuthenticated, async (req, res) => {
     try {
         const { clienteId, consultorId, dataInicio, dataFim } = req.query;
         const whereClause = {};
@@ -244,9 +469,7 @@ app.get('/consultas/trabalhos', async (req, res) => {
     }
 });
 
-
-// Rota para renderização da página consultores.ejs com dados do banco de dados
-app.get('/cadastro/consultores', async (req, res) => {
+app.get('/cadastro/consultores', isAuthenticated, async (req, res) => {
     try {
         const consultores = await Consultores.findAll();
         res.render('consultores', { data: consultores });
@@ -255,8 +478,8 @@ app.get('/cadastro/consultores', async (req, res) => {
         res.status(500).send('Erro ao consultar dados do banco de dados.');
     }
 });
-// Rota para renderização da página consultoria.ejs com dados do banco de dados
-app.get('/consultoria/inserir', async (req, res) => {
+
+app.get('/consultoria/inserir', isAuthenticated, async (req, res) => {
     try {
         const clientes = await Clientes.findAll();
         const consultores = await Consultores.findAll();
@@ -264,7 +487,6 @@ app.get('/consultoria/inserir', async (req, res) => {
             include: [Clientes, Consultores]
         });
 
-        // Mapeando a consultoria para incluir o totalValor
         const consultoriasComTotal = consultorias.map(item => ({
             ...item.toJSON(),
             totalValor: item.totalValor
@@ -281,8 +503,7 @@ app.get('/consultoria/inserir', async (req, res) => {
     }
 });
 
-// Rota para renderizar a tela de pesquisa de consultores
-app.get('/pesquisa/consultores', async (req, res) => {
+app.get('/pesquisa/consultores', isAuthenticated, async (req, res) => {
     try {
         const consultores = await Consultores.findAll();
         res.render('pesquisa_consultores', { consultores: consultores });
@@ -292,8 +513,7 @@ app.get('/pesquisa/consultores', async (req, res) => {
     }
 });
 
-// Rota para lidar com a pesquisa de consultores
-app.post('/pesquisa/consultores', async (req, res) => {
+app.post('/pesquisa/consultores', isAuthenticated, async (req, res) => {
     try {
         const { nome, endereco, telefone, email, login } = req.body;
         const whereClause = {};
@@ -302,7 +522,7 @@ app.post('/pesquisa/consultores', async (req, res) => {
         if (endereco) whereClause.endereco = { [Op.like]: `%${endereco}%` };
         if (telefone) whereClause.telefone = { [Op.like]: `%${telefone}%` };
         if (email) whereClause.email = { [Op.like]: `%${email}%` };
-        if (login) whereClause.login = { [Op.like]: `%${login}%` };
+        if (login) whereClause.login = { [Op.like]: `%{login}%` };
 
         const consultores = await Consultores.findAll({ where: whereClause });
         res.render('pesquisa_consultores', { consultores: consultores });
@@ -312,8 +532,7 @@ app.post('/pesquisa/consultores', async (req, res) => {
     }
 });
 
-// Rota para renderizar a tela de edição de consultor
-app.get('/editar-consultor/:id', async (req, res) => {
+app.get('/editar-consultor/:id', isAuthenticated, async (req, res) => {
     try {
         const { id } = req.params;
         const consultor = await Consultores.findByPk(id);
@@ -328,8 +547,7 @@ app.get('/editar-consultor/:id', async (req, res) => {
     }
 });
 
-// Rota para atualizar os dados do consultor
-app.post('/editar-consultor/:id', async (req, res) => {
+app.post('/editar-consultor/:id', isAuthenticated, async (req, res) => {
     try {
         const { id } = req.params;
         const { nome, endereco, telefone, email, login, senha, admin } = req.body;
@@ -358,11 +576,9 @@ app.post('/editar-consultor/:id', async (req, res) => {
     }
 });
 
-// Rota para deletar um consultor
-app.post('/deletar-consultor/:id', async (req, res) => {
+app.post('/deletar-consultor/:id', isAuthenticated, async (req, res) => {
     try {
         const { id } = req.params;
-        // Verifica se o consultor está vinculado a alguma consultoria ou outro cadastro
         const consultoriasVinculadas = await Consultoria.findAll({ where: { consultorId: id } });
         if (consultoriasVinculadas.length > 0) {
             return res.status(400).json({ message: 'Consultor adicionado em algum cadastro. Desvincule e tente novamente!' });
@@ -375,8 +591,7 @@ app.post('/deletar-consultor/:id', async (req, res) => {
     }
 });
 
-// Rota para renderizar a página de clientes
-app.get('/cadastro/clientes', async (req, res) => {
+app.get('/cadastro/clientes', isAuthenticated, async (req, res) => {
     try {
         const clientes = await Clientes.findAll();
         res.render('clientes', { data: clientes });
@@ -386,8 +601,7 @@ app.get('/cadastro/clientes', async (req, res) => {
     }
 });
 
-// Rotas para renderizar a tela de pesquisa de clientes
-app.get('/pesquisa/clientes', async (req, res) => {
+app.get('/pesquisa/clientes', isAuthenticated, async (req, res) => {
     try {
         const clientes = await Clientes.findAll();
         res.render('pesquisa_clientes', { clientes: clientes });
@@ -397,8 +611,7 @@ app.get('/pesquisa/clientes', async (req, res) => {
     }
 });
 
-// Rota para lidar com a pesquisa de clientes
-app.post('/pesquisa/clientes', async (req, res) => {
+app.post('/pesquisa/clientes', isAuthenticated, async (req, res) => {
     try {
         const { razaoSocial, nomeFantasia, cnpj, telefone, email } = req.body;
         const whereClause = {};
@@ -406,8 +619,8 @@ app.post('/pesquisa/clientes', async (req, res) => {
         if (razaoSocial) whereClause.razaoSocial = { [Op.like]: `%${razaoSocial}%` };
         if (nomeFantasia) whereClause.nomeFantasia = { [Op.like]: `%${nomeFantasia}%` };
         if (cnpj) whereClause.cnpj = { [Op.like]: `%${cnpj}%` };
-        if (telefone) whereClause.telefone = { [Op.like]: `%${telefone}%` };
-        if (email) whereClause.email = { [Op.like]: `%${email}%` };
+        if (telefone) whereClause.telefone = { [Op.like]: `%{telefone}%` };
+        if (email) whereClause.email = { [Op.like]: `%{email}%` };
 
         const clientes = await Clientes.findAll({ where: whereClause });
         res.render('pesquisa_clientes', { clientes: clientes });
@@ -417,8 +630,7 @@ app.post('/pesquisa/clientes', async (req, res) => {
     }
 });
 
-// Rota para renderizar a tela de edição de clientes
-app.get('/editar-cliente/:id', async (req, res) => {
+app.get('/editar-cliente/:id', isAuthenticated, async (req, res) => {
     try {
         const { id } = req.params;
         const cliente = await Clientes.findByPk(id);
@@ -433,8 +645,7 @@ app.get('/editar-cliente/:id', async (req, res) => {
     }
 });
 
-// Rota para atualizar os dados do cliente
-app.post('/editar-cliente/:id', async (req, res) => {
+app.post('/editar-cliente/:id', isAuthenticated, async (req, res) => {
     try {
         const { id } = req.params;
         const { razaoSocial, nomeFantasia, cnpj, telefone, email } = req.body;
@@ -444,23 +655,22 @@ app.post('/editar-cliente/:id', async (req, res) => {
             cliente.razaoSocial = razaoSocial;
             cliente.nomeFantasia = nomeFantasia;
             cliente.cnpj = cnpj;
-                cliente.telefone = telefone;
-                cliente.email = email;
+            cliente.telefone = telefone;
+            cliente.email = email;
 
-                await cliente.save();
+            await cliente.save();
 
-                res.redirect('/pesquisa/clientes');
-            } else {
-                res.status(404).send('Cliente não encontrado.');
-            }
-        } catch (err) {
-            console.error('Erro ao atualizar dados do cliente:', err);
-            res.status(500).send('Erro ao atualizar dados do cliente.');
+            res.redirect('/pesquisa/clientes');
+        } else {
+            res.status(404).send('Cliente não encontrado.');
         }
-    });
+    } catch (err) {
+        console.error('Erro ao atualizar dados do cliente:', err);
+        res.status(500).send('Erro ao atualizar dados do cliente.');
+    }
+});
 
-// Rota para deletar um cliente
-app.post('/deletar-cliente/:id', async (req, res) => {
+app.post('/deletar-cliente/:id', isAuthenticated, async (req, res) => {
     try {
         const { id } = req.params;
         await Clientes.destroy({ where: { id: id } });
@@ -471,12 +681,11 @@ app.post('/deletar-cliente/:id', async (req, res) => {
     }
 });
 
-// Rota para renderizar a página de cadastro de feedback
-app.get('/feedback/cadastrar', async (req, res) => {
+app.get('/feedback/cadastrar', isAuthenticated, async (req, res) => {
     try {
         const clientes = await Clientes.findAll();
-        const consultores = await Consultores.findAll(); // Obter a lista de consultores
-        const success = req.query.success || false; // Adiciona a variável success
+        const consultores = await Consultores.findAll(); 
+        const success = req.query.success || false; 
         res.render('cadastrar_feedback', { clientes: clientes, consultores: consultores, success: success });
     } catch (err) {
         console.error('Erro ao carregar página de cadastro de feedback:', err);
@@ -484,16 +693,15 @@ app.get('/feedback/cadastrar', async (req, res) => {
     }
 });
 
-// Rota para lidar com a solicitação de salvar o feedback no banco de dados
-app.post('/feedback/cadastrar', async (req, res) => {
+app.post('/feedback/cadastrar', isAuthenticated, async (req, res) => {
     try {
-        const { titulo, data, clienteId, consultorId, texto } = req.body; // Adiciona consultorId
+        const { titulo, data, clienteId, consultorId, texto } = req.body; 
 
         const novoFeedback = await Feedback.create({
             titulo,
             data,
             clienteId,
-            consultorId, // Inclui consultorId
+            consultorId, 
             texto
         });
 
@@ -504,9 +712,7 @@ app.post('/feedback/cadastrar', async (req, res) => {
     }
 });
 
-
-// Rota para renderizar a página de pesquisa de feedback
-app.get('/feedback/pesquisar', async (req, res) => {
+app.get('/feedback/pesquisar', isAuthenticated, async (req, res) => {
     try {
         const clientes = await Clientes.findAll();
         const consultores = await Consultores.findAll();
@@ -529,8 +735,7 @@ app.get('/feedback/pesquisar', async (req, res) => {
     }
 });
 
-// Rota para renderizar a tela de edição de feedback
-app.get('/editar-feedback/:id', async (req, res) => {
+app.get('/editar-feedback/:id', isAuthenticated, async (req, res) => {
     try {
         const { id } = req.params;
         const feedback = await Feedback.findByPk(id, {
@@ -549,8 +754,7 @@ app.get('/editar-feedback/:id', async (req, res) => {
     }
 });
 
-// Rota para atualizar os dados do feedback
-app.post('/editar-feedback/:id', async (req, res) => {
+app.post('/editar-feedback/:id', isAuthenticated, async (req, res) => {
     try {
         const { id } = req.params;
         const { titulo, data, clienteId, consultorId, texto } = req.body;
@@ -575,8 +779,7 @@ app.post('/editar-feedback/:id', async (req, res) => {
     }
 });
 
-// Rota para deletar um feedback
-app.post('/deletar-feedback/:id', async (req, res) => {
+app.post('/deletar-feedback/:id', isAuthenticated, async (req, res) => {
     try {
         const { id } = req.params;
         await Feedback.destroy({ where: { id: id } });
@@ -587,8 +790,7 @@ app.post('/deletar-feedback/:id', async (req, res) => {
     }
 });
 
-// Rota para renderizar a tela de edição de consultoria
-app.get('/editar-consultoria/:id', async (req, res) => {
+app.get('/editar-consultoria/:id', isAuthenticated, async (req, res) => {
     try {
         const { id } = req.params;
         const consultoria = await Consultoria.findByPk(id, {
@@ -607,8 +809,7 @@ app.get('/editar-consultoria/:id', async (req, res) => {
     }
 });
 
-// Rota para atualizar os dados da consultoria
-app.post('/editar-consultoria/:id', async (req, res) => {
+app.post('/editar-consultoria/:id', isAuthenticated, async (req, res) => {
     try {
         const { id } = req.params;
         const { data, horaInicio, horaFim, intervalo, valorHora, clienteId, consultorId } = req.body;
@@ -635,8 +836,7 @@ app.post('/editar-consultoria/:id', async (req, res) => {
     }
 });
 
-// Rota para deletar uma consultoria
-app.post('/deletar-consultoria/:id', async (req, res) => {
+app.post('/deletar-consultoria/:id', isAuthenticated, async (req, res) => {
     try {
         const { id } = req.params;
         await Consultoria.destroy({ where: { id: id } });
@@ -645,17 +845,6 @@ app.post('/deletar-consultoria/:id', async (req, res) => {
         console.error('Erro ao deletar consultoria:', err);
         res.status(500).send('Erro ao deletar consultoria.');
     }
-});
-
-
-// Rota para a página do menu principal
-app.get('/menu', (req, res) => {
-    res.render('menu');
-});
-
-// Adicione a rota para o caminho raiz para renderizar o menu.ejs
-app.get('/', (req, res) => {
-    res.render('login');
 });
 
 // Inicialização do servidor
